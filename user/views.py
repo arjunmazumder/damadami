@@ -26,9 +26,13 @@ class RegisterView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             
         try:
+            validated_data = serializer.validated_data.copy()
+            email = validated_data.pop('email')
+            password = validated_data.pop('password')
             user = AuthenticationService.register(
-                email=serializer.validated_data['email'],
-                password=serializer.validated_data['password']
+                email=email,
+                password=password,
+                **validated_data
             )
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -137,3 +141,12 @@ class LogoutView(APIView):
         response.delete_cookie('refresh_token')
         
         return response
+
+from rest_framework import generics
+from .models import User
+
+@extend_schema(tags=['users'])
+class UserListView(generics.ListAPIView):
+    permission_classes = [] 
+    queryset = User.objects.all()
+    serializer_class = UserSerializer

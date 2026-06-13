@@ -6,6 +6,15 @@ from .utils import generate_access_token, generate_refresh_token
 
 class AuthenticationService:
     @staticmethod
+    def register(email, password, **kwargs):
+        from .models import User
+        if User.objects.filter(email=email).exists():
+            raise ValueError("User with this email already exists")
+            
+        user = User.objects.create_user(email=email, password=password, **kwargs)
+        return user
+
+    @staticmethod
     def login(email, password):
         user = authenticate(email=email, password=password)
         if not user:

@@ -31,12 +31,13 @@ SECRET_KEY = "django-insecure-s_4p&!x=o#182!7fu0qcz#u=p-2z)71@uw5s-%*5do$)i1#dm7
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['testserver', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -46,6 +47,10 @@ INSTALLED_APPS = [
     "rest_framework",
     "drf_spectacular",
     "user",
+    "lookup",
+    "tag",
+    "permission",
+    "livesession",
 ]
 
 AUTH_USER_MODEL = 'user.User'
@@ -62,6 +67,8 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Production-style JWT Authentication API',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
+    'SERVE_AUTHENTICATION': [],
 }
 
 MIDDLEWARE = [
@@ -91,7 +98,19 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "damadami.wsgi.application"
+ASGI_APPLICATION = 'damadami.asgi.application'
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
+
+AGORA_APP_ID = os.getenv("AGORA_APP_ID", default="YOUR_AGORA_APP_ID")
+AGORA_APP_CERTIFICATE = os.getenv("AGORA_APP_CERTIFICATE", default="YOUR_AGORA_APP_CERTIFICATE")
 
 
 # Database
