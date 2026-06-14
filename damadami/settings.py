@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "tag",
     "permission",
     "livesession",
+    "invoice",
 ]
 
 AUTH_USER_MODEL = 'user.User'

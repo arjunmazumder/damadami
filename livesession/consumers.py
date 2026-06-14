@@ -96,6 +96,19 @@ class CallConsumer(AsyncWebsocketConsumer):
             'session_id': event['session_id']
         }))
 
+    async def new_invoice(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'new_invoice',
+            'message': 'You have received a new invoice.',
+            'invoice': {
+                'id': event['invoice_id'],
+                'vendor_name': event['vendor_name'],
+                'tag_name': event['tag_name'],
+                'total_price': event['total_price'],
+                'status': event['status']
+            }
+        }))
+
     # --- Business Logic Helpers ---
 
     async def handle_initiate_call(self, tag_id):
