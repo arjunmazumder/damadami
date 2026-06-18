@@ -37,3 +37,7 @@ Thumbs.db
 # Static / Media
 /static/
 /media/
+
+# Extra files
+Redis5/
+*.zip
