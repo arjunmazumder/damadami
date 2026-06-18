@@ -26,7 +26,7 @@ class User(AbstractUser):
     permanent_address = models.TextField(blank=True, null=True)
     present_address   = models.TextField(blank=True, null=True)
     phone_number      = models.CharField(max_length=20, blank=True, null=True)
-    image             = models.ImageField(upload_to='users/', blank=True, null=True)
+    image             = models.ImageField(upload_to='users/img', blank=True, null=True)
     is_online         = models.BooleanField(default=False)
 
     role = models.ForeignKey(
@@ -55,3 +55,11 @@ class UserSession(models.Model):
 
     def __str__(self):
         return f"Session for {self.user.email}"
+
+class UserOTP(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='otp')
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"OTP for {self.user.email}"
