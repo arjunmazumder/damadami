@@ -27,6 +27,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             'invoice_id': str(invoice.id),
             'vendor_name': invoice.vendor.name or invoice.vendor.email,
             'tag_name': invoice.tag.tagname if invoice.tag else None,
+            'price_per_piece': str(invoice.price_per_piece),
+            'quantity': invoice.quantity,
             'total_price': str(invoice.total_price),
             'status': invoice.status
         }

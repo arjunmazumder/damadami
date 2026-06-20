@@ -9,6 +9,7 @@ class CallSession(models.Model):
         ('connected', 'Connected'),
         ('cancelled', 'Cancelled'),
         ('completed', 'Completed'),
+        ('timeout', 'Timeout'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
