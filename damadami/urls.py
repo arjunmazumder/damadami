@@ -11,6 +11,7 @@ urlpatterns = [
     path("livesession/", include('livesession.urls')),
     path("invoice/", include('invoice.urls')),
     path("payment/", include('paymentgateway.urls')),
+    path("crm/", include('crm.urls')),
     path('schema/', SpectacularAPIView.as_view(), name='schema'),
     path('swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),

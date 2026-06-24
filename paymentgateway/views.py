@@ -64,7 +64,7 @@ class InitiatePaymentView(APIView):
 
         # Build callback URLs
         # In production, use your actual domain instead of 127.0.0.1
-        base_url = "http://127.0.0.1:8000/payment"
+        base_url = "http://127.0.0.1:8001/payment"
         post_body = {}
         post_body['total_amount'] = float(invoice.total_price)
         post_body['currency'] = "BDT"

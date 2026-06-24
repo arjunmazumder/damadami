@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.permissions import AllowAny
 from django.conf import settings
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers
@@ -161,7 +162,7 @@ class RegisterView(APIView):
 
 
 class LoginView(APIView):
-    permission_classes = []
+    permission_classes = [AllowAny]
 
     @extend_schema(
         request=LoginSerializer,
@@ -208,7 +209,7 @@ class LoginView(APIView):
 
 
 class RefreshView(APIView):
-    permission_classes = []
+    # permission_classes = []
 
     @extend_schema(
         request=None,

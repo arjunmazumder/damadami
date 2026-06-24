@@ -16,8 +16,12 @@ class CallSession(models.Model):
     buyer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='initiated_calls')
     tag = models.ForeignKey(AdminTag, on_delete=models.CASCADE, related_name='calls')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='searching')
-    accepted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='accepted_calls')
+    vendor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='accepted_calls')
+    rejected_vendors = models.ManyToManyField(User, related_name='rejected_calls', blank=True)
     channel_name = models.CharField(max_length=255, unique=True)
+    start_time = models.DateTimeField(null=True, blank=True)
+    end_time = models.DateTimeField(null=True, blank=True)
+    duration = models.DurationField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

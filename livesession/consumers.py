@@ -5,6 +5,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 from user.models import User
 from tag.models import AdminTag, VendorTag
 from .models import CallSession
@@ -81,6 +82,14 @@ class CallConsumer(AsyncWebsocketConsumer):
                     return
                 session_id = data.get('session_id')
                 await self.handle_decline_call(session_id)
+
+            elif action == 'reject_call':
+                if self.is_vendor:
+                    await self.send(json.dumps({'error': 'Vendors cannot reject calls.'}))
+                    return
+                session_id = data.get('session_id')
+                await self.handle_reject_call(session_id)
+
         except Exception as e:
             await self.send(json.dumps({'error': str(e)}))
 
@@ -116,6 +125,13 @@ class CallConsumer(AsyncWebsocketConsumer):
             'message': event['message']
         }))
 
+    async def call_rejected_by_buyer(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'call_rejected_by_buyer',
+            'session_id': event['session_id'],
+            'message': 'Buyer has rejected this call.'
+        }))
+
     async def new_invoice(self, event):
         await self.send(text_data=json.dumps({
             'type': 'new_invoice',
@@ -124,6 +140,9 @@ class CallConsumer(AsyncWebsocketConsumer):
                 'id': event['invoice_id'],
                 'vendor_name': event['vendor_name'],
                 'tag_name': event['tag_name'],
+                'product_name': event.get('product_name'),
+                'short_note_id': event.get('short_note_id'),
+                'is_confirm': event.get('is_confirm', False),
                 'price_per_piece': event['price_per_piece'],
                 'quantity': event['quantity'],
                 'total_price': event['total_price'],
@@ -168,7 +187,7 @@ class CallConsumer(AsyncWebsocketConsumer):
 
     async def check_timeout(self, session_id, notified_vendors):
         import asyncio
-        await asyncio.sleep(30)
+        await asyncio.sleep(60)
         success = await self.timeout_call_atomic(session_id)
         if success:
             # Notify buyer
@@ -264,15 +283,68 @@ class CallConsumer(AsyncWebsocketConsumer):
             'message': 'You have declined the call.'
         }))
 
+    async def handle_reject_call(self, session_id):
+        success, session, rejected_vendor_id, new_vendor_ids, tag_name = await self.reject_call_atomic(session_id, self.user.id)
+        if not success:
+            await self.send(json.dumps({'error': 'Cannot reject this call or call not in connected state.'}))
+            return
+
+        # Notify the rejected vendor
+        if rejected_vendor_id:
+            await self.channel_layer.group_send(
+                f"vendor_{rejected_vendor_id}",
+                {
+                    'type': 'call_rejected_by_buyer',
+                    'session_id': str(session.id)
+                }
+            )
+
+        if not new_vendor_ids:
+            await self.send(json.dumps({
+                'type': 'call_timeout',
+                'session_id': str(session.id),
+                'message': 'No other online vendors found.'
+            }))
+            # Update session to timeout
+            await self.timeout_call_atomic(str(session.id))
+            return
+
+        # Broadcast incoming call to other online vendors
+        for v_id in new_vendor_ids:
+            await self.channel_layer.group_send(
+                f"vendor_{v_id}",
+                {
+                    'type': 'incoming_call',
+                    'session_id': str(session.id),
+                    'tag_name': tag_name,
+                    'buyer_name': self.user.name or self.user.email
+                }
+            )
+        
+        await self.send(json.dumps({
+            'type': 'call_searching',
+            'session_id': str(session.id),
+            'message': 'Searching for other vendors...'
+        }))
+        
+        # Start timeout timer again
+        import asyncio
+        asyncio.create_task(self.check_timeout(str(session.id), new_vendor_ids))
+
     # --- Database Sync to Async ---
 
     @database_sync_to_async
     def get_user_from_token(self, token):
         if not token: return None
         try:
+            print("Received Token:", token)
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
-            return User.objects.get(id=payload['user_id'])
-        except Exception:
+            print("Decoded Payload:", payload)
+            user = User.objects.get(id=payload['user_id'])
+            print(f"Connected User -> Name: {user.name}, Email: {user.email}")
+            return user
+        except Exception as e:
+            print("Token Error:", str(e))
             return None
 
     @database_sync_to_async
@@ -315,7 +387,8 @@ class CallConsumer(AsyncWebsocketConsumer):
                     return False, None, []
                 
                 session.status = 'connected'
-                session.accepted_by_id = vendor_id
+                session.vendor_id = vendor_id
+                session.start_time = timezone.now()
                 session.save()
 
                 vendor_tags = VendorTag.objects.filter(admin_tag=session.tag)
@@ -330,14 +403,25 @@ class CallConsumer(AsyncWebsocketConsumer):
         with transaction.atomic():
             try:
                 session = CallSession.objects.select_for_update().get(id=session_id, buyer_id=buyer_id)
-                if session.status != 'searching':
+                if session.status not in ['searching', 'connected']:
                     return False, []
-                session.status = 'cancelled'
+                
+                was_connected = (session.status == 'connected')
+                accepted_vendor_id = session.vendor_id if was_connected else None
+                
+                session.status = 'completed' if was_connected else 'cancelled'
+                if was_connected:
+                    session.end_time = timezone.now()
+                    if session.start_time:
+                        session.duration = session.end_time - session.start_time
                 session.save()
                 
-                vendor_tags = VendorTag.objects.filter(admin_tag=session.tag)
-                vendor_ids = list(vendor_tags.values_list('vendor_id', flat=True))
-                return True, vendor_ids
+                if was_connected and accepted_vendor_id:
+                    return True, [accepted_vendor_id]
+                else:
+                    vendor_tags = VendorTag.objects.filter(admin_tag=session.tag)
+                    vendor_ids = list(vendor_tags.values_list('vendor_id', flat=True))
+                    return True, vendor_ids
             except CallSession.DoesNotExist:
                 return False, []
 
@@ -353,3 +437,31 @@ class CallConsumer(AsyncWebsocketConsumer):
                 return False
             except CallSession.DoesNotExist:
                 return False
+
+    @database_sync_to_async
+    def reject_call_atomic(self, session_id, buyer_id):
+        with transaction.atomic():
+            try:
+                session = CallSession.objects.select_for_update().get(id=session_id, buyer_id=buyer_id)
+                if session.status != 'connected' or not session.vendor:
+                    return False, None, None, [], None
+                
+                rejected_vendor_id = session.vendor.id
+                session.status = 'searching'
+                
+                session.rejected_vendors.add(session.vendor)
+                
+                session.vendor = None
+                session.save()
+                
+                # Find other online vendors for this tag
+                vendor_tags = VendorTag.objects.filter(admin_tag=session.tag, vendor__is_online=True)
+                all_vendor_ids = list(vendor_tags.values_list('vendor_id', flat=True))
+                
+                # Exclude rejected vendors
+                rejected_vendor_ids = list(session.rejected_vendors.values_list('id', flat=True))
+                new_vendor_ids = [vid for vid in all_vendor_ids if vid not in rejected_vendor_ids]
+                
+                return True, session, rejected_vendor_id, new_vendor_ids, session.tag.tagname
+            except CallSession.DoesNotExist:
+                return False, None, None, [], None
