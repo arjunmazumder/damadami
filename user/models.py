@@ -23,6 +23,8 @@ class User(AbstractUser):
     email             = models.EmailField(unique=True)
 
     name              = models.CharField(max_length=150, blank=True, null=True)
+    wallet_balance    = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, help_text="Amount owed to the vendor")
+
     permanent_address = models.TextField(blank=True, null=True)
     present_address   = models.TextField(blank=True, null=True)
     phone_number      = models.CharField(max_length=20, blank=True, null=True)

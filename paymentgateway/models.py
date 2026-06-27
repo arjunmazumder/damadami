@@ -17,6 +17,9 @@ class Payment(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     
+    commission_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text="Platform Commission")
+    vendor_earning = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text="Amount for the vendor")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -25,3 +28,18 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"Payment {self.tran_id} - {self.status}"
+
+class Payout(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    vendor = models.ForeignKey('user.User', on_delete=models.CASCADE, related_name='payouts')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    reference_id = models.CharField(max_length=100, blank=True, null=True, help_text="Bank/Bkash TrxID")
+    status = models.CharField(max_length=20, choices=[('PENDING', 'Pending'), ('COMPLETED', 'Completed')], default='PENDING')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Payout {self.id} for {self.vendor.email} - {self.status}"
