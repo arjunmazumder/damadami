@@ -39,20 +39,36 @@ def update_vendor_balance_on_payout(sender, instance, created, **kwargs):
     if instance.status == 'COMPLETED':
         recalculate_vendor_wallet(instance.vendor)
 
+from django.utils import timezone
+from datetime import timedelta
+from invoice.models import Invoice
+
+@receiver(post_save, sender=Invoice)
+def update_vendor_balance_on_delivery_confirm(sender, instance, created, **kwargs):
+    if instance.buyer_confirmed_delivery:
+        recalculate_vendor_wallet(instance.vendor)
+
 def recalculate_vendor_wallet(vendor):
     # Sum of all successful vendor earnings
     successful_payments = Payment.objects.filter(
         invoice__vendor=vendor, 
         status='SUCCESS'
     )
-    total_earned = sum(p.vendor_earning for p in successful_payments)
+    
+    total_earned = Decimal('0.00')
+    now = timezone.now()
+    
+    for p in successful_payments:
+        # Fund is released if buyer confirmed OR 4 hours have passed since payment
+        if p.invoice.buyer_confirmed_delivery or (now - p.updated_at) > timedelta(hours=4):
+            total_earned += p.vendor_earning
     
     # Sum of all completed payouts
     completed_payouts = Payout.objects.filter(
         vendor=vendor,
         status='COMPLETED'
     )
-    total_paid = sum(p.amount for p in completed_payouts)
+    total_paid = sum(p.amount for p in completed_payouts) or Decimal('0.00')
     
     vendor.wallet_balance = total_earned - total_paid
     vendor.save(update_fields=['wallet_balance'])

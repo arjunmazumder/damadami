@@ -195,3 +195,96 @@ class PaymentCancelView(APIView):
             })
         except Payment.DoesNotExist:
             return Response({"error": "Payment not found"}, status=status.HTTP_404_NOT_FOUND)
+
+from .models import Payout
+from user.models import User
+from decimal import Decimal
+
+class AdminMarkAsPaidView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    @extend_schema(
+        responses={200: inline_serializer(
+            name="AdminPayoutListResponse",
+            fields={
+                "id": serializers.UUIDField(),
+                "vendor_name": serializers.CharField(),
+                "vendor_email": serializers.EmailField(),
+                "amount": serializers.DecimalField(max_digits=10, decimal_places=2),
+                "reference_id": serializers.CharField(),
+                "note": serializers.CharField(),
+                "status": serializers.CharField(),
+                "created_at": serializers.DateTimeField()
+            },
+            many=True
+        )}
+    )
+    def get(self, request):
+        payouts = Payout.objects.select_related('vendor').all().order_by('-created_at')
+        data = []
+        for p in payouts:
+            data.append({
+                "id": p.id,
+                "vendor_name": p.vendor.name if p.vendor else None,
+                "vendor_email": p.vendor.email if p.vendor else None,
+                "amount": p.amount,
+                "reference_id": p.reference_id,
+                "note": p.note,
+                "status": p.status,
+                "created_at": p.created_at
+            })
+        return Response(data)
+
+    @extend_schema(
+        request=inline_serializer(
+            name="AdminMarkAsPaidRequest",
+            fields={
+                "vendor_name": serializers.CharField(),
+                "amount": serializers.DecimalField(max_digits=10, decimal_places=2),
+                "reference_id": serializers.CharField(required=False, help_text="Bank/Bkash TrxID"),
+                "note": serializers.CharField(required=False, help_text="Optional note regarding the payout"),
+            }
+        ),
+        responses={200: inline_serializer(
+            name="AdminMarkAsPaidResponse",
+            fields={
+                "message": serializers.CharField()
+            }
+        )}
+    )
+    def post(self, request):
+        vendor_name = request.data.get('vendor_name')
+        amount = request.data.get('amount')
+        reference_id = request.data.get('reference_id', '')
+        note = request.data.get('note', '')
+
+        if not vendor_name or amount is None:
+            return Response({"error": "vendor_name and amount are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            amount = Decimal(str(amount))
+            if amount <= 0:
+                return Response({"error": "Amount must be greater than zero"}, status=status.HTTP_400_BAD_REQUEST)
+        except:
+            return Response({"error": "Invalid amount format"}, status=status.HTTP_400_BAD_REQUEST)
+
+        vendor = User.objects.filter(name=vendor_name).first()
+        if not vendor:
+            vendor = User.objects.filter(email=vendor_name).first()
+            
+        if not vendor:
+            return Response({"error": "Vendor not found with the given name"}, status=status.HTTP_404_NOT_FOUND)
+
+        if amount > vendor.wallet_balance:
+            return Response({"error": f"Cannot payout more than available balance ({vendor.wallet_balance})"}, status=status.HTTP_400_BAD_REQUEST)
+
+        Payout.objects.create(
+            vendor=vendor,
+            amount=amount,
+            reference_id=reference_id,
+            status='COMPLETED',
+            note=note
+        )
+
+        return Response({"message": f"Successfully marked {amount} as paid to {vendor.email}."})
+

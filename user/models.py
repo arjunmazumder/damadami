@@ -65,3 +65,19 @@ class UserOTP(models.Model):
 
     def __str__(self):
         return f"OTP for {self.user.email}"
+
+class VendorPayoutMethod(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='payout_method')
+    bank_name = models.CharField(max_length=255, blank=True, null=True)
+    account_name = models.CharField(max_length=255, blank=True, null=True)
+    account_number = models.CharField(max_length=100, blank=True, null=True)
+    branch_name = models.CharField(max_length=255, blank=True, null=True)
+    bkash_number = models.CharField(max_length=20, blank=True, null=True)
+    nagad_number = models.CharField(max_length=20, blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Payout Method for {self.user.email}"

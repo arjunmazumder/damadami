@@ -63,6 +63,7 @@ class Invoice(models.Model):
     product_name = models.CharField(max_length=255, blank=True, null=True)
     short_note = models.ForeignKey(ShortNote, on_delete=models.SET_NULL, null=True, blank=True, related_name='invoices')
     is_confirm = models.BooleanField(default=False)
+    buyer_confirmed_delivery = models.BooleanField(default=False)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     

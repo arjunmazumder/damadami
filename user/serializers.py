@@ -66,3 +66,11 @@ class ResetPasswordSerializer(serializers.Serializer):
         if data.get('new_password') != data.get('confirm_password'):
             raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
         return data
+
+from .models import VendorPayoutMethod
+
+class VendorPayoutMethodSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VendorPayoutMethod
+        fields = ['id', 'user', 'bank_name', 'account_name', 'account_number', 'branch_name', 'bkash_number', 'nagad_number', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']

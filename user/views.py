@@ -1,6 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, generics
+from rest_framework import status, generics, viewsets, permissions
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import AllowAny
 from django.conf import settings
@@ -274,7 +274,35 @@ class LogoutView(APIView):
 
 
 @extend_schema(tags=['users'])
-class UserListView(generics.ListAPIView):
+class UserViewSet(viewsets.ModelViewSet):
     permission_classes = []
     queryset           = User.objects.all()
     serializer_class   = UserSerializer
+
+
+from .models import VendorPayoutMethod
+from .serializers import VendorPayoutMethodSerializer
+
+class VendorPayoutMethodViewSet(viewsets.ModelViewSet):
+    serializer_class = VendorPayoutMethodSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser or getattr(user.role, 'value', '') == 'Admin':
+            return VendorPayoutMethod.objects.all()
+        return VendorPayoutMethod.objects.filter(user=user)
+
+    def create(self, request, *args, **kwargs):
+        user = request.user
+        existing_method = VendorPayoutMethod.objects.filter(user=user).first()
+        if existing_method:
+            # If exists, update it instead of creating a new one
+            serializer = self.get_serializer(existing_method, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)

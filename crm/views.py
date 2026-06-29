@@ -24,6 +24,18 @@ class BuyerListView(APIView):
         serializer = VendorSerializer(buyers, many=True)
         return Response(serializer.data)
 
+from rest_framework import generics
+
+class VendorDetailView(generics.RetrieveAPIView):
+    queryset = User.objects.filter(role__value='Vendor')
+    serializer_class = VendorSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+class BuyerDetailView(generics.RetrieveAPIView):
+    queryset = User.objects.filter(role__value='Buyer')
+    serializer_class = VendorSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
 class PercentageViewSet(viewsets.ModelViewSet):
     queryset = Percentage.objects.all()
     serializer_class = PercentageSerializer
@@ -85,12 +97,27 @@ class DashboardSummaryView(APIView):
             total=Sum('amount')
         )['total'] or 0.00
 
+        # 6. Funds in Escrow
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        now = timezone.now()
+        four_hours_ago = now - timedelta(hours=4)
+        
+        escrow_payments = payments_qs.filter(
+            status='SUCCESS', 
+            invoice__buyer_confirmed_delivery=False,
+            updated_at__gt=four_hours_ago
+        )
+        escrow_balance = escrow_payments.aggregate(total=Sum('amount'))['total'] or 0.00
+
         data = {
             "total_payment_volume": total_balance,
             "current_commission_percentage": current_percentage,
             "total_commission_earned": total_commission,
             "total_vendor_payouts": total_payout,
             "pending_vendor_balances": pending_balance,
+            "escrow_balance": escrow_balance,
             "filters_applied": {
                 "start_date": start_date,
                 "end_date": end_date,
@@ -122,4 +149,23 @@ class TransactionListView(APIView):
             payments = payments.filter(created_at__lte=end_date)
             
         serializer = TransactionSerializer(payments, many=True)
+        return Response(serializer.data)
+
+from .serializers import VendorPayoutTransactionSerializer
+
+class VendorPayoutListView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        
+        payments = Payment.objects.all().order_by('-created_at')
+        
+        if start_date:
+            payments = payments.filter(created_at__gte=start_date)
+        if end_date:
+            payments = payments.filter(created_at__lte=end_date)
+            
+        serializer = VendorPayoutTransactionSerializer(payments, many=True)
         return Response(serializer.data)

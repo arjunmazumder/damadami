@@ -1,5 +1,10 @@
-from django.urls import path
-from .views import LoginView, RefreshView, LogoutView, RegisterView, UserListView, VerifyOTPView, ForgotPasswordView, ResendOTPView, ResetPasswordView
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import LoginView, RefreshView, LogoutView, RegisterView, UserViewSet, VerifyOTPView, ForgotPasswordView, ResendOTPView, ResetPasswordView, VendorPayoutMethodViewSet
+
+router = DefaultRouter()
+router.register(r'payout-methods', VendorPayoutMethodViewSet, basename='payout-method')
+router.register(r'users', UserViewSet, basename='user')
 
 urlpatterns = [
     path('register', RegisterView.as_view(), name='register'),
@@ -10,5 +15,6 @@ urlpatterns = [
     path('login', LoginView.as_view(), name='login'),
     path('getRefreshToken', RefreshView.as_view(), name='refresh'),
     path('logout', LogoutView.as_view(), name='logout'),
-    path('users', UserListView.as_view(), name='users-list'),
+
+    path('', include(router.urls)),
 ]

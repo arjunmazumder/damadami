@@ -77,3 +77,51 @@ class ShortNoteViewSet(viewsets.ModelViewSet):
             vendor=session.vendor,
             tag=session.tag
         )
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers
+
+class ConfirmDeliveryView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        request=inline_serializer(
+            name="ConfirmDeliveryRequest",
+            fields={
+                "invoice_id": serializers.UUIDField(),
+            }
+        ),
+        responses={200: inline_serializer(
+            name="ConfirmDeliveryResponse",
+            fields={
+                "message": serializers.CharField()
+            }
+        )}
+    )
+    def post(self, request):
+        invoice_id = request.data.get('invoice_id')
+        if not invoice_id:
+            return Response({"error": "invoice_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            invoice = Invoice.objects.get(id=invoice_id)
+        except Invoice.DoesNotExist:
+            return Response({"error": "Invoice not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        if invoice.buyer != request.user:
+            return Response({"error": "Only the buyer can confirm delivery for this invoice"}, status=status.HTTP_403_FORBIDDEN)
+            
+        if invoice.status != 'paid':
+            return Response({"error": "Invoice is not paid yet"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if invoice.buyer_confirmed_delivery:
+            return Response({"error": "Delivery is already confirmed"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        invoice.buyer_confirmed_delivery = True
+        invoice.save()
+        
+        return Response({"message": "Delivery confirmed successfully. Escrow funds released to vendor."})
+
