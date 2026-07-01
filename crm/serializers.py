@@ -38,6 +38,7 @@ class TransactionSerializer(serializers.ModelSerializer):
 
 class VendorPayoutTransactionSerializer(serializers.ModelSerializer):
     vendor_name = serializers.SerializerMethodField()
+    vendor_id = serializers.SerializerMethodField()
     commission_percentage = serializers.SerializerMethodField()
     payout_amount = serializers.DecimalField(source='vendor_earning', max_digits=10, decimal_places=2, read_only=True)
     status = serializers.SerializerMethodField()
@@ -45,10 +46,15 @@ class VendorPayoutTransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
         fields = [
-            'id', 'tran_id', 'vendor_name', 'amount', 
+            'id', 'tran_id','vendor_id', 'vendor_name', 'amount', 
             'commission_percentage', 'commission_amount', 
             'payout_amount', 'created_at', 'status'
         ]
+
+    def get_vendor_id(self, obj):
+        if obj.invoice and obj.invoice.vendor:
+            return obj.invoice.vendor.id
+        return None
 
     def get_vendor_name(self, obj):
         if obj.invoice and obj.invoice.vendor:

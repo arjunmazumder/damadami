@@ -10,7 +10,7 @@ class PaymentAdmin(admin.ModelAdmin):
 
 @admin.register(Payout)
 class PayoutAdmin(admin.ModelAdmin):
-    list_display = ['vendor', 'amount', 'reference_id', 'status', 'created_at']
+    list_display = ['vendor', 'amount', 'reference_id', 'trx_id', 'status', 'created_at']
     list_filter = ['status', 'created_at']
-    search_fields = ['vendor__email', 'reference_id']
+    search_fields = ['vendor__email', 'reference_id', 'trx_id']
     readonly_fields = ['created_at', 'updated_at']

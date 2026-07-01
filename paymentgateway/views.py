@@ -46,14 +46,21 @@ class InitiatePaymentView(APIView):
         if invoice.status == 'paid':
             return Response({"error": "Invoice is already paid"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create a pending Payment record
-        tran_id = str(uuid.uuid4())
-        Payment.objects.create(
-            invoice=invoice,
-            tran_id=tran_id,
-            amount=invoice.total_price,
-            status='PENDING'
-        )
+        # Check for existing pending payment or create a new one
+        existing_payment = Payment.objects.filter(invoice=invoice, status='PENDING').first()
+        if existing_payment:
+            tran_id = existing_payment.tran_id
+            if existing_payment.amount != invoice.total_price:
+                existing_payment.amount = invoice.total_price
+                existing_payment.save(update_fields=['amount'])
+        else:
+            tran_id = str(uuid.uuid4())
+            Payment.objects.create(
+                invoice=invoice,
+                tran_id=tran_id,
+                amount=invoice.total_price,
+                status='PENDING'
+            )
 
         settings_dict = {
             'store_id': settings.SSLCOMMERZ_STORE_ID,
@@ -208,10 +215,12 @@ class AdminMarkAsPaidView(APIView):
             name="AdminPayoutListResponse",
             fields={
                 "id": serializers.UUIDField(),
+                "vendor_id": serializers.UUIDField(),
                 "vendor_name": serializers.CharField(),
                 "vendor_email": serializers.EmailField(),
                 "amount": serializers.DecimalField(max_digits=10, decimal_places=2),
                 "reference_id": serializers.CharField(),
+                "trx_id": serializers.CharField(),
                 "note": serializers.CharField(),
                 "status": serializers.CharField(),
                 "created_at": serializers.DateTimeField()
@@ -219,16 +228,19 @@ class AdminMarkAsPaidView(APIView):
             many=True
         )}
     )
+   
     def get(self, request):
         payouts = Payout.objects.select_related('vendor').all().order_by('-created_at')
         data = []
         for p in payouts:
             data.append({
                 "id": p.id,
+                "vendor_id": p.vendor.id if p.vendor else None,
                 "vendor_name": p.vendor.name if p.vendor else None,
                 "vendor_email": p.vendor.email if p.vendor else None,
                 "amount": p.amount,
                 "reference_id": p.reference_id,
+                "trx_id": p.trx_id,
                 "note": p.note,
                 "status": p.status,
                 "created_at": p.created_at
@@ -239,9 +251,11 @@ class AdminMarkAsPaidView(APIView):
         request=inline_serializer(
             name="AdminMarkAsPaidRequest",
             fields={
-                "vendor_name": serializers.CharField(),
+                "vendor_id": serializers.UUIDField(required=False),
+                "vendor_name": serializers.CharField(required=False),
                 "amount": serializers.DecimalField(max_digits=10, decimal_places=2),
-                "reference_id": serializers.CharField(required=False, help_text="Bank/Bkash TrxID"),
+                "reference_id": serializers.CharField(required=False),
+                "trx_id": serializers.CharField(required=False, help_text="Transaction ID"),
                 "note": serializers.CharField(required=False, help_text="Optional note regarding the payout"),
             }
         ),
@@ -252,14 +266,17 @@ class AdminMarkAsPaidView(APIView):
             }
         )}
     )
+
     def post(self, request):
+        vendor_id = request.data.get('vendor_id')
         vendor_name = request.data.get('vendor_name')
         amount = request.data.get('amount')
         reference_id = request.data.get('reference_id', '')
+        trx_id = request.data.get('trx_id', '')
         note = request.data.get('note', '')
 
-        if not vendor_name or amount is None:
-            return Response({"error": "vendor_name and amount are required"}, status=status.HTTP_400_BAD_REQUEST)
+        if not (vendor_id or vendor_name) or amount is None:
+            return Response({"error": "Either vendor_id or vendor_name, along with amount, are required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             amount = Decimal(str(amount))
@@ -268,9 +285,12 @@ class AdminMarkAsPaidView(APIView):
         except:
             return Response({"error": "Invalid amount format"}, status=status.HTTP_400_BAD_REQUEST)
 
-        vendor = User.objects.filter(name=vendor_name).first()
-        if not vendor:
-            vendor = User.objects.filter(email=vendor_name).first()
+        if vendor_id:
+            vendor = User.objects.filter(id=vendor_id).first()
+        else:
+            vendor = User.objects.filter(name=vendor_name).first()
+            if not vendor:
+                vendor = User.objects.filter(email=vendor_name).first()
             
         if not vendor:
             return Response({"error": "Vendor not found with the given name"}, status=status.HTTP_404_NOT_FOUND)
@@ -282,6 +302,7 @@ class AdminMarkAsPaidView(APIView):
             vendor=vendor,
             amount=amount,
             reference_id=reference_id,
+            trx_id=trx_id,
             status='COMPLETED',
             note=note
         )
